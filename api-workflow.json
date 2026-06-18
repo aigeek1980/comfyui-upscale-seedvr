@@ -40,6 +40,10 @@
         "65",
         0
       ],
+      "max_resolution": [
+        "65",
+        0
+      ],
       "batch_size": 1,
       "uniform_batch_size": false,
       "color_correction": "lab",
