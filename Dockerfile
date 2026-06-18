@@ -2,8 +2,10 @@ FROM runpod/worker-comfyui:5.8.4-base
 
 ARG HF_TOKEN=""
 
-# Install dependencies — pin transformers to 4.x for GroundingDINO compatibility
-RUN pip install websocket-client "transformers==4.57.6" && \
+# Install dependencies
+# - transformers pinned to 4.x for GroundingDINO compatibility (v5 removed get_head_mask)
+# - kornia pinned to 0.7.3 for GrowMaskWithBlur uint8 mask compatibility
+RUN pip install websocket-client "transformers==4.57.6" "kornia==0.7.3" && \
     apt-get update && apt-get install -y curl && \
     rm -rf /var/lib/apt/lists/*
 
