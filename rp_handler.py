@@ -1,129 +1,187 @@
 import runpod
-import json
-import base64
 import os
+import websocket
+import base64
+import json
+import uuid
+import logging
 import urllib.request
-import urllib.error
+import urllib.parse
+import binascii
 import time
 
-COMFY_HOST = "127.0.0.1:8188"
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Load workflow template once at startup
-WORKFLOW_PATH = os.path.join(os.path.dirname(__file__), "workflow.json")
+SERVER_ADDRESS = os.getenv('SERVER_ADDRESS', '127.0.0.1')
+CLIENT_ID = str(uuid.uuid4())
+
+# Load api-workflow.json once at startup — flat dict keyed by node ID string
+WORKFLOW_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "api-workflow.json")
 with open(WORKFLOW_PATH) as f:
     WORKFLOW_TEMPLATE = json.load(f)
 
-
-def wait_for_comfy(timeout=60):
-    """Wait until ComfyUI is ready."""
-    start = time.time()
-    while time.time() - start < timeout:
-        try:
-            urllib.request.urlopen(f"http://{COMFY_HOST}/system_stats")
-            return True
-        except Exception:
-            time.sleep(1)
-    raise RuntimeError("ComfyUI did not start in time")
+# Node IDs (from api-workflow.json)
+NODE_LOAD_IMAGE   = "63"   # LoadImage
+NODE_RESOLUTION   = "65"   # PrimitiveInt — Upscale Resolution
+NODE_SHARP_INTENSITY = "97"   # PrimitiveFloat — Sharp Intensity
+NODE_SHARP_PROMPT = "102"  # PrimitiveString — Sharp Prompt
 
 
-def upload_image(image_b64, filename="input.png"):
-    """Upload base64 image to ComfyUI input folder."""
-    image_bytes = base64.b64decode(image_b64)
-    import urllib.parse, io
-    # Write directly to comfyui input folder
-    input_path = f"/comfyui/input/{filename}"
-    with open(input_path, "wb") as f:
-        f.write(image_bytes)
+def save_base64_to_file(b64_data, output_path):
+    """Decode base64 and write to file. Returns path."""
+    try:
+        decoded = base64.b64decode(b64_data)
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        with open(output_path, 'wb') as f:
+            f.write(decoded)
+        logger.info(f"✅ Image saved to {output_path}")
+        return output_path
+    except (binascii.Error, ValueError) as e:
+        raise Exception(f"Base64 decode failed: {e}")
 
 
-def queue_workflow(workflow):
-    """Submit workflow to ComfyUI and return prompt_id."""
-    data = json.dumps({"prompt": workflow}).encode()
-    req = urllib.request.Request(
-        f"http://{COMFY_HOST}/prompt",
-        data=data,
-        headers={"Content-Type": "application/json"}
-    )
-    with urllib.request.urlopen(req) as resp:
-        return json.loads(resp.read())["prompt_id"]
+def queue_prompt(prompt):
+    url = f"http://{SERVER_ADDRESS}:8188/prompt"
+    p = {"prompt": prompt, "client_id": CLIENT_ID}
+    data = json.dumps(p).encode('utf-8')
+    req = urllib.request.Request(url, data=data)
+    return json.loads(urllib.request.urlopen(req).read())
 
 
-def wait_for_result(prompt_id, timeout=600):
-    """Poll until job completes, return output images."""
-    start = time.time()
-    while time.time() - start < timeout:
-        with urllib.request.urlopen(
-            f"http://{COMFY_HOST}/history/{prompt_id}"
-        ) as resp:
-            history = json.loads(resp.read())
-        if prompt_id in history:
-            outputs = history[prompt_id]["outputs"]
-            # Find SaveImage node output
-            for node_id, node_output in outputs.items():
-                if "images" in node_output:
-                    return node_output["images"]
-        time.sleep(2)
-    raise RuntimeError(f"Job {prompt_id} timed out")
-
-
-def get_image_b64(filename, subfolder="", img_type="output"):
-    """Fetch output image from ComfyUI and return as base64."""
-    import urllib.parse
+def get_image(filename, subfolder, folder_type):
     params = urllib.parse.urlencode({
         "filename": filename,
         "subfolder": subfolder,
-        "type": img_type
+        "type": folder_type
     })
+    with urllib.request.urlopen(f"http://{SERVER_ADDRESS}:8188/view?{params}") as resp:
+        return resp.read()
+
+
+def get_history(prompt_id):
     with urllib.request.urlopen(
-        f"http://{COMFY_HOST}/view?{params}"
+        f"http://{SERVER_ADDRESS}:8188/history/{prompt_id}"
     ) as resp:
-        return base64.b64encode(resp.read()).decode()
+        return json.loads(resp.read())
+
+
+def get_images_via_websocket(ws, prompt):
+    """Submit prompt and wait for completion via WebSocket."""
+    prompt_id = queue_prompt(prompt)['prompt_id']
+    output_images = {}
+
+    while True:
+        out = ws.recv()
+        if isinstance(out, str):
+            message = json.loads(out)
+            if message['type'] == 'executing':
+                data = message['data']
+                if data['node'] is None and data['prompt_id'] == prompt_id:
+                    break  # execution complete
+        else:
+            continue  # binary frame, skip
+
+    history = get_history(prompt_id)[prompt_id]
+    for node_id, node_output in history['outputs'].items():
+        images_output = []
+        if 'images' in node_output:
+            for image in node_output['images']:
+                image_data = get_image(image['filename'], image['subfolder'], image['type'])
+                if isinstance(image_data, bytes):
+                    image_data = base64.b64encode(image_data).decode('utf-8')
+                images_output.append(image_data)
+        output_images[node_id] = images_output
+
+    return output_images
+
+
+def wait_for_comfyui(max_wait=120):
+    """Poll HTTP until ComfyUI is ready."""
+    url = f"http://{SERVER_ADDRESS}:8188/"
+    for attempt in range(max_wait):
+        try:
+            urllib.request.urlopen(url, timeout=5)
+            logger.info(f"✅ ComfyUI ready (attempt {attempt + 1})")
+            return
+        except Exception as e:
+            logger.warning(f"Waiting for ComfyUI ({attempt + 1}/{max_wait}): {e}")
+            time.sleep(1)
+    raise Exception("ComfyUI did not start within timeout")
 
 
 def handler(job):
-    job_input = job["input"]
+    job_input = job.get("input", {})
+    logger.info(f"Received job input keys: {list(job_input.keys())}")
 
-    # Extract inputs with defaults
-    image_b64   = job_input["image"]
-    resolution  = int(job_input.get("resolution", 2000))
-    sharp_prompt    = job_input.get("sharp_prompt", "person")
+    task_id = f"task_{uuid.uuid4()}"
+
+    # --- Resolve input image (base64, url, or path) ---
+    if "image_base64" in job_input:
+        image_path = f"/comfyui/input/{task_id}_input.png"
+        save_base64_to_file(job_input["image_base64"], image_path)
+    elif "image_url" in job_input:
+        import subprocess
+        image_path = f"/comfyui/input/{task_id}_input.png"
+        result = subprocess.run(
+            ['wget', '-O', image_path, '--no-verbose', job_input["image_url"]],
+            capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            return {"error": f"Image download failed: {result.stderr}"}
+    elif "image" in job_input:
+        # Support plain "image" key as base64 for simplicity
+        image_path = f"/comfyui/input/{task_id}_input.png"
+        save_base64_to_file(job_input["image"], image_path)
+    else:
+        return {"error": "No image provided. Use 'image' (base64), 'image_url', or 'image_base64'."}
+
+    # --- Get parameters ---
+    resolution      = int(job_input.get("resolution", 2000))
     sharp_intensity = float(job_input.get("sharp_intensity", 2.0))
+    sharp_prompt    = job_input.get("sharp_prompt", "person")
 
-    # Wait for ComfyUI to be ready
-    wait_for_comfy()
-
-    # Upload input image
-    upload_image(image_b64, "input.png")
-
-    # Deep copy workflow template
+    # --- Deep copy workflow template and patch ---
     workflow = json.loads(json.dumps(WORKFLOW_TEMPLATE))
 
-    # Helper to find node by ID
-    def node(node_id):
-        return next(n for n in workflow["nodes"] if n["id"] == node_id)
+    workflow[NODE_LOAD_IMAGE]["inputs"]["image"]        = image_path
+    workflow[NODE_RESOLUTION]["inputs"]["value"]        = resolution
+    workflow[NODE_SHARP_INTENSITY]["inputs"]["value"]   = sharp_intensity
+    workflow[NODE_SHARP_PROMPT]["inputs"]["value"]      = sharp_prompt
 
-    # Patch parameters
-    node(63)["widgets_values"][0]  = "input.png"    # LoadImage
-    node(65)["widgets_values"][0]  = resolution      # Upscale Resolution
-    node(97)["widgets_values"][0]  = sharp_intensity  # Sharp Intensity
-    node(102)["widgets_values"][0] = sharp_prompt     # Sharp Prompt
+    # --- Wait for ComfyUI ---
+    wait_for_comfyui()
 
-    # Submit to ComfyUI
-    prompt_id = queue_workflow(workflow)
+    # --- Connect WebSocket ---
+    ws_url = f"ws://{SERVER_ADDRESS}:8188/ws?clientId={CLIENT_ID}"
+    ws = websocket.WebSocket()
 
-    # Wait for result
-    images = wait_for_result(prompt_id)
+    for attempt in range(36):  # up to 3 min
+        try:
+            ws.connect(ws_url)
+            logger.info(f"✅ WebSocket connected (attempt {attempt + 1})")
+            break
+        except Exception as e:
+            logger.warning(f"WebSocket connect failed ({attempt + 1}/36): {e}")
+            if attempt == 35:
+                return {"error": "WebSocket connection timeout"}
+            time.sleep(5)
 
-    # Return first output image as base64
-    img_info = images[0]
-    result_b64 = get_image_b64(
-        img_info["filename"],
-        img_info.get("subfolder", ""),
-        img_info.get("type", "output")
-    )
+    # --- Run workflow ---
+    try:
+        images = get_images_via_websocket(ws, workflow)
+    finally:
+        ws.close()
 
-    return {"image": result_b64, "prompt_id": prompt_id}
+    if not images:
+        return {"error": "No images returned from ComfyUI"}
+
+    # Return first image found
+    for node_id, node_images in images.items():
+        if node_images:
+            return {"image": node_images[0]}
+
+    return {"error": "No output image found"}
 
 
-if __name__ == "__main__":
-    runpod.serverless.start({"handler": handler})
+runpod.serverless.start({"handler": handler})
