@@ -1,1 +1,226 @@
-{"20":{"inputs":{},"class_type":"SeedVR2LoadDiTModel","_meta":{"title":"SeedVR2LoadDiTModel"}},"29":{"inputs":{},"class_type":"SeedVR2LoadVAEModel","_meta":{"title":"SeedVR2LoadVAEModel"}},"53":{"inputs":{"image":["77",0],"dit":["20",0],"vae":["29",0],"resolution":["65",0],"max_resolution":["65",0]},"class_type":"SeedVR2VideoUpscaler","_meta":{"title":"SeedVR2VideoUpscaler"}},"63":{"inputs":{"image":"2116be21-0c89-49f3-8d1a-7aef34c2712c.png"},"class_type":"LoadImage","_meta":{"title":"LoadImage"}},"65":{"inputs":{"value":3000},"class_type":"PrimitiveInt","_meta":{"title":"Upscale Resolution"}},"67":{"inputs":{"image":["63",0],"sharpen":["97",0]},"class_type":"> Sharpen","_meta":{"title":"> Sharpen"}},"68":{"inputs":{},"class_type":"SAM2ModelLoader (segment anything2)","_meta":{"title":"SAM Model Loader"}},"69":{"inputs":{"sam_model":["68",0],"grounding_dino_model":["75",0],"image":["63",0],"prompt":["102",0]},"class_type":"GroundingDinoSAM2Segment (segment anything2)","_meta":{"title":"SAM"}},"75":{"inputs":{},"class_type":"GroundingDinoModelLoader (segment anything2)","_meta":{"title":"Grounding Model Load"}},"77":{"inputs":{"destination":["63",0],"source":["67",0],"mask":["93",0],"x":0,"y":0,"offset_x":0,"offset_y":0},"class_type":"ImageComposite+","_meta":{"title":"ImageComposite+"}},"93":{"inputs":{"mask":["69",1],"expand":5,"incremental_expandrate":0,"tapered_corners":true,"flip_input":false,"blur_radius":1,"lerp_alpha":1,"decay_factor":1,"fill_holes":true},"class_type":"GrowMaskWithBlur","_meta":{"title":"GrowMaskWithBlur"}},"97":{"inputs":{"value":2},"class_type":"PrimitiveFloat","_meta":{"title":"Sharp Inrensity"}},"102":{"inputs":{"value":"women"},"class_type":"PrimitiveString","_meta":{"title":"Sharp Prompt"}},"105":{"inputs":{"images":["53",0],"filename_prefix":"upscaled_%date:yyyy-MM-dd%"},"class_type":"SaveImage","_meta":{"title":"SaveImage"}}}
+{
+  "20": {
+    "inputs": {
+      "model": "seedvr2_ema_7b_fp16.safetensors",
+      "device": "cuda:0",
+      "blocks_to_swap": 36,
+      "swap_io_components": true,
+      "offload_device": "cpu",
+      "cache_model": false,
+      "attention_mode": "sdpa"
+    },
+    "class_type": "SeedVR2LoadDiTModel",
+    "_meta": {
+      "title": "SeedVR2 (Down)Load DiT Model"
+    }
+  },
+  "29": {
+    "inputs": {
+      "model": "ema_vae_fp16.safetensors",
+      "device": "cuda:0",
+      "encode_tiled": true,
+      "encode_tile_size": 512,
+      "encode_tile_overlap": 128,
+      "decode_tiled": true,
+      "decode_tile_size": 512,
+      "decode_tile_overlap": 128,
+      "tile_debug": "false",
+      "offload_device": "cpu",
+      "cache_model": false
+    },
+    "class_type": "SeedVR2LoadVAEModel",
+    "_meta": {
+      "title": "SeedVR2 (Down)Load VAE Model"
+    }
+  },
+  "53": {
+    "inputs": {
+      "seed": 4105349923,
+      "resolution": [
+        "65",
+        0
+      ],
+      "max_resolution": [
+        "65",
+        0
+      ],
+      "batch_size": 1,
+      "uniform_batch_size": false,
+      "color_correction": "lab",
+      "temporal_overlap": 16,
+      "prepend_frames": 0,
+      "input_noise_scale": 0,
+      "latent_noise_scale": 0,
+      "offload_device": "cpu",
+      "enable_debug": false,
+      "image": [
+        "77",
+        0
+      ],
+      "dit": [
+        "20",
+        0
+      ],
+      "vae": [
+        "29",
+        0
+      ]
+    },
+    "class_type": "SeedVR2VideoUpscaler",
+    "_meta": {
+      "title": "SeedVR2 Video Upscaler (v2.5.24)"
+    }
+  },
+  "63": {
+    "inputs": {
+      "image": "input.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "65": {
+    "inputs": {
+      "value": 3000
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Upscale Resolution"
+    }
+  },
+  "67": {
+    "inputs": {
+      "sharpen": [
+        "97",
+        0
+      ],
+      "image": [
+        "63",
+        0
+      ]
+    },
+    "class_type": "> Sharpen",
+    "_meta": {
+      "title": "😼> Sharpen"
+    }
+  },
+  "68": {
+    "inputs": {
+      "model_name": "sam2_hiera_base_plus.pt"
+    },
+    "class_type": "SAM2ModelLoader (segment anything2)",
+    "_meta": {
+      "title": "SAM Model Loader"
+    }
+  },
+  "69": {
+    "inputs": {
+      "prompt": [
+        "102",
+        0
+      ],
+      "threshold": 0.5,
+      "sam_model": [
+        "68",
+        0
+      ],
+      "grounding_dino_model": [
+        "75",
+        0
+      ],
+      "image": [
+        "63",
+        0
+      ]
+    },
+    "class_type": "GroundingDinoSAM2Segment (segment anything2)",
+    "_meta": {
+      "title": "SAM"
+    }
+  },
+  "75": {
+    "inputs": {
+      "model_name": "GroundingDINO_SwinT_OGC (694MB)"
+    },
+    "class_type": "GroundingDinoModelLoader (segment anything2)",
+    "_meta": {
+      "title": "Grounding Model Load"
+    }
+  },
+  "77": {
+    "inputs": {
+      "x": 0,
+      "y": 0,
+      "offset_x": 0,
+      "offset_y": 0,
+      "destination": [
+        "63",
+        0
+      ],
+      "source": [
+        "67",
+        0
+      ],
+      "mask": [
+        "93",
+        0
+      ]
+    },
+    "class_type": "ImageComposite+",
+    "_meta": {
+      "title": "🔧 Image Composite"
+    }
+  },
+  "93": {
+    "inputs": {
+      "expand": 5,
+      "incremental_expandrate": 0,
+      "tapered_corners": true,
+      "flip_input": false,
+      "blur_radius": 1,
+      "lerp_alpha": 1,
+      "decay_factor": 1,
+      "fill_holes": true,
+      "mask": [
+        "69",
+        1
+      ]
+    },
+    "class_type": "GrowMaskWithBlur",
+    "_meta": {
+      "title": "Grow Mask With Blur"
+    }
+  },
+  "97": {
+    "inputs": {
+      "value": 2
+    },
+    "class_type": "PrimitiveFloat",
+    "_meta": {
+      "title": "Sharp Inrensity"
+    }
+  },
+  "102": {
+    "inputs": {
+      "value": "women"
+    },
+    "class_type": "PrimitiveString",
+    "_meta": {
+      "title": "Sharp Prompt"
+    }
+  },
+  "105": {
+    "inputs": {
+      "filename_prefix": "upscaled_2026-06-18",
+      "images": [
+        "53",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  }
+}
