@@ -2,8 +2,8 @@ FROM runpod/worker-comfyui:5.8.4-base
 
 ARG HF_TOKEN=""
 
-# Install websocket-client for handler
-RUN pip install websocket-client
+# Install websocket-client and curl
+RUN pip install websocket-client && apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
 # Custom nodes
 RUN comfy node install --exit-on-fail comfyui-sam2@1.0.3 --mode remote || (echo "WARN: comfyui-sam2@1.0.3 unavailable in registry, falling back to latest" >&2 && comfy node install --exit-on-fail comfyui-sam2 --mode remote)
@@ -52,8 +52,10 @@ RUN BACKOFFS="10 20 30 60 90" && for i in 1 2 3 4 5; do \
     if [ $i -eq 5 ]; then echo "model-download failed" >&2; exit 1; fi; \
     SLEEP=$(echo $BACKOFFS | cut -d ' ' -f $i) && sleep $SLEEP; done
 
-# Copy handler and workflow
+# Copy handler, workflow and startup script
 COPY rp_handler.py /rp_handler.py
 COPY api-workflow.json /api-workflow.json
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
 
-CMD python -u /rp_handler.py
+CMD ["/start.sh"]

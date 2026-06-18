@@ -22,14 +22,14 @@ with open(WORKFLOW_PATH) as f:
     WORKFLOW_TEMPLATE = json.load(f)
 
 # Node IDs (from api-workflow.json)
-NODE_LOAD_IMAGE   = "63"   # LoadImage
-NODE_RESOLUTION   = "65"   # PrimitiveInt — Upscale Resolution
+NODE_LOAD_IMAGE      = "63"   # LoadImage
+NODE_RESOLUTION      = "65"   # PrimitiveInt — Upscale Resolution
 NODE_SHARP_INTENSITY = "97"   # PrimitiveFloat — Sharp Intensity
-NODE_SHARP_PROMPT = "102"  # PrimitiveString — Sharp Prompt
+NODE_SHARP_PROMPT    = "102"  # PrimitiveString — Sharp Prompt
 
 
 def save_base64_to_file(b64_data, output_path):
-    """Decode base64 and write to file. Returns path."""
+    """Decode base64 and write to file."""
     try:
         decoded = base64.b64decode(b64_data)
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -96,27 +96,13 @@ def get_images_via_websocket(ws, prompt):
     return output_images
 
 
-def wait_for_comfyui(max_wait=120):
-    """Poll HTTP until ComfyUI is ready."""
-    url = f"http://{SERVER_ADDRESS}:8188/"
-    for attempt in range(max_wait):
-        try:
-            urllib.request.urlopen(url, timeout=5)
-            logger.info(f"✅ ComfyUI ready (attempt {attempt + 1})")
-            return
-        except Exception as e:
-            logger.warning(f"Waiting for ComfyUI ({attempt + 1}/{max_wait}): {e}")
-            time.sleep(1)
-    raise Exception("ComfyUI did not start within timeout")
-
-
 def handler(job):
     job_input = job.get("input", {})
     logger.info(f"Received job input keys: {list(job_input.keys())}")
 
     task_id = f"task_{uuid.uuid4()}"
 
-    # --- Resolve input image (base64, url, or path) ---
+    # --- Resolve input image ---
     if "image_base64" in job_input:
         image_path = f"/comfyui/input/{task_id}_input.png"
         save_base64_to_file(job_input["image_base64"], image_path)
@@ -130,13 +116,12 @@ def handler(job):
         if result.returncode != 0:
             return {"error": f"Image download failed: {result.stderr}"}
     elif "image" in job_input:
-        # Support plain "image" key as base64 for simplicity
         image_path = f"/comfyui/input/{task_id}_input.png"
         save_base64_to_file(job_input["image"], image_path)
     else:
         return {"error": "No image provided. Use 'image' (base64), 'image_url', or 'image_base64'."}
 
-    # --- Get parameters ---
+    # --- Get parameters with defaults ---
     resolution      = int(job_input.get("resolution", 2000))
     sharp_intensity = float(job_input.get("sharp_intensity", 2.0))
     sharp_prompt    = job_input.get("sharp_prompt", "person")
@@ -144,13 +129,10 @@ def handler(job):
     # --- Deep copy workflow template and patch ---
     workflow = json.loads(json.dumps(WORKFLOW_TEMPLATE))
 
-    workflow[NODE_LOAD_IMAGE]["inputs"]["image"]        = image_path
-    workflow[NODE_RESOLUTION]["inputs"]["value"]        = resolution
-    workflow[NODE_SHARP_INTENSITY]["inputs"]["value"]   = sharp_intensity
-    workflow[NODE_SHARP_PROMPT]["inputs"]["value"]      = sharp_prompt
-
-    # --- Wait for ComfyUI ---
-    wait_for_comfyui()
+    workflow[NODE_LOAD_IMAGE]["inputs"]["image"]      = image_path
+    workflow[NODE_RESOLUTION]["inputs"]["value"]      = resolution
+    workflow[NODE_SHARP_INTENSITY]["inputs"]["value"] = sharp_intensity
+    workflow[NODE_SHARP_PROMPT]["inputs"]["value"]    = sharp_prompt
 
     # --- Connect WebSocket ---
     ws_url = f"ws://{SERVER_ADDRESS}:8188/ws?clientId={CLIENT_ID}"
