@@ -36,11 +36,7 @@
   "53": {
     "inputs": {
       "seed": 4105349923,
-      "resolution": [
-        "65",
-        0
-      ],
-      "max_resolution": [
+      "new_resolution": [
         "65",
         0
       ],
