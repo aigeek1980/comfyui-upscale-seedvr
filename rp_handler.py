@@ -7,6 +7,7 @@ import uuid
 import logging
 import urllib.request
 import urllib.parse
+import urllib.error
 import binascii
 import time
 
@@ -46,7 +47,12 @@ def queue_prompt(prompt):
     p = {"prompt": prompt, "client_id": CLIENT_ID}
     data = json.dumps(p).encode('utf-8')
     req = urllib.request.Request(url, data=data)
-    return json.loads(urllib.request.urlopen(req).read())
+    try:
+        return json.loads(urllib.request.urlopen(req).read())
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode('utf-8')
+        logger.error(f"ComfyUI /prompt rejected: {error_body}")
+        raise Exception(f"ComfyUI 400: {error_body}")
 
 
 def get_image(filename, subfolder, folder_type):
@@ -133,6 +139,12 @@ def handler(job):
     workflow[NODE_RESOLUTION]["inputs"]["value"]      = resolution
     workflow[NODE_SHARP_INTENSITY]["inputs"]["value"] = sharp_intensity
     workflow[NODE_SHARP_PROMPT]["inputs"]["value"]    = sharp_prompt
+
+    # --- Log patched workflow for debugging ---
+    logger.info(f"Patched node {NODE_LOAD_IMAGE}: {workflow[NODE_LOAD_IMAGE]['inputs']}")
+    logger.info(f"Patched node {NODE_RESOLUTION}: {workflow[NODE_RESOLUTION]['inputs']}")
+    logger.info(f"Patched node {NODE_SHARP_INTENSITY}: {workflow[NODE_SHARP_INTENSITY]['inputs']}")
+    logger.info(f"Patched node {NODE_SHARP_PROMPT}: {workflow[NODE_SHARP_PROMPT]['inputs']}")
 
     # --- Connect WebSocket ---
     ws_url = f"ws://{SERVER_ADDRESS}:8188/ws?clientId={CLIENT_ID}"
