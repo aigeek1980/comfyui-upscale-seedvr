@@ -8,9 +8,15 @@ RUN pip install websocket-client && apt-get update && apt-get install -y curl &&
 # Custom nodes
 RUN comfy node install --exit-on-fail comfyui-sam2@1.0.3 --mode remote || (echo "WARN: comfyui-sam2@1.0.3 unavailable in registry, falling back to latest" >&2 && comfy node install --exit-on-fail comfyui-sam2 --mode remote)
 
-RUN git clone https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler /comfyui/custom_nodes/ComfyUI-SeedVR2_VideoUpscaler && cd /comfyui/custom_nodes/ComfyUI-SeedVR2_VideoUpscaler && (git checkout 690cc39379c1481159ddd451368dbf2295930fc6 2>/dev/null || echo "WARN: falling back to HEAD")
+RUN git clone https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler /comfyui/custom_nodes/ComfyUI-SeedVR2_VideoUpscaler && \
+    cd /comfyui/custom_nodes/ComfyUI-SeedVR2_VideoUpscaler && \
+    (git checkout 690cc39379c1481159ddd451368dbf2295930fc6 2>/dev/null || echo "WARN: falling back to HEAD") && \
+    pip install -r requirements.txt
 
-RUN git clone https://github.com/ALatentPlace/ComfyUI_yanc /comfyui/custom_nodes/ComfyUI_yanc && cd /comfyui/custom_nodes/ComfyUI_yanc && (git checkout 923c366c2937cf6ce55e8a808e29f23831281bb5 2>/dev/null || echo "WARN: falling back to HEAD")
+RUN git clone https://github.com/ALatentPlace/ComfyUI_yanc /comfyui/custom_nodes/ComfyUI_yanc && \
+    cd /comfyui/custom_nodes/ComfyUI_yanc && \
+    (git checkout 923c366c2937cf6ce55e8a808e29f23831281bb5 2>/dev/null || echo "WARN: falling back to HEAD") && \
+    (pip install -r requirements.txt 2>/dev/null || echo "No requirements.txt")
 
 RUN comfy node install --exit-on-fail comfyui-kjnodes@1.1.9 || (echo "WARN: falling back to latest" >&2 && comfy node install --exit-on-fail comfyui-kjnodes)
 
