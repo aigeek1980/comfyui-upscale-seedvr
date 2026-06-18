@@ -2,6 +2,9 @@ FROM runpod/worker-comfyui:5.8.4-base
 
 ARG HF_TOKEN=""
 
+# Install websocket-client for handler
+RUN pip install websocket-client
+
 # Custom nodes
 RUN comfy node install --exit-on-fail comfyui-sam2@1.0.3 --mode remote || (echo "WARN: comfyui-sam2@1.0.3 unavailable in registry, falling back to latest" >&2 && comfy node install --exit-on-fail comfyui-sam2 --mode remote)
 
@@ -48,6 +51,9 @@ RUN BACKOFFS="10 20 30 60 90" && for i in 1 2 3 4 5; do \
     --filename 'seedvr2_ema_7b_fp16.safetensors' && break; \
     if [ $i -eq 5 ]; then echo "model-download failed" >&2; exit 1; fi; \
     SLEEP=$(echo $BACKOFFS | cut -d ' ' -f $i) && sleep $SLEEP; done
+
+# Copy handler and workflow
 COPY rp_handler.py /rp_handler.py
-COPY workflow.json /workflow.json
+COPY api-workflow.json /api-workflow.json
+
 CMD python -u /rp_handler.py
